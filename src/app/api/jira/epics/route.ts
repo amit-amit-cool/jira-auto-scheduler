@@ -22,24 +22,29 @@ export async function GET(request: NextRequest) {
     // Discover field IDs (or use overrides)
     const spOverride = searchParams.get('storyPointsFieldId') || undefined;
     const tsOverride = searchParams.get('timeSpentFieldId') || undefined;
+    const nwldOverride = searchParams.get('nwldFieldId') || undefined;
 
     let storyPointsFieldId: string | null = spOverride || null;
     let timeSpentFieldId: string | null = tsOverride || null;
+    let nwldFieldId: string | null = nwldOverride || null;
 
     if (!storyPointsFieldId || !timeSpentFieldId) {
       const allFields = await jiraFetch<JiraField[]>('/rest/api/3/field', credentials);
       const discovered = discoverFieldIds(allFields, {
         storyPointsFieldId: spOverride,
         timeSpentFieldId: tsOverride,
+        nwldFieldId: nwldOverride,
       });
       storyPointsFieldId = storyPointsFieldId || discovered.storyPointsFieldId;
       timeSpentFieldId = timeSpentFieldId || discovered.timeSpentFieldId;
+      nwldFieldId = nwldFieldId || discovered.nwldFieldId;
     }
 
     // Fetch epics with custom fields
     const extraFields = [
       storyPointsFieldId,
       timeSpentFieldId,
+      nwldFieldId,
     ].filter((f): f is string => !!f);
 
     const epics = await fetchAllEpics(projectKeys, credentials, extraFields);
@@ -48,6 +53,7 @@ export async function GET(request: NextRequest) {
       epics,
       storyPointsFieldId,
       timeSpentFieldId,
+      nwldFieldId,
       total: epics.length,
     });
   } catch (err) {

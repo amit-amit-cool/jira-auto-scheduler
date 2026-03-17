@@ -5,7 +5,7 @@ import { useFields } from '@/hooks/useFields';
 
 export function AdvancedFields() {
   const { settings, updateSettings } = useSettings();
-  const { fields, storyPointsFieldId, timeSpentFieldId } = useFields();
+  const { fields, storyPointsFieldId, timeSpentFieldId, nwldFieldId } = useFields();
   const [open, setOpen] = useState(false);
 
   const customFields = fields.filter((f: { custom: boolean }) => f.custom);
@@ -63,6 +63,27 @@ export function AdvancedFields() {
                 })
               }
               placeholder={timeSpentFieldId ?? 'customfield_XXXXX'}
+              className="w-full border rounded px-3 py-2 text-sm font-mono"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              NWLD Field ID{' '}
+              <span className="text-gray-400 font-normal">(auto: {nwldFieldId ?? 'not found'})</span>
+            </label>
+            <input
+              type="text"
+              value={settings.fieldOverrides.nwldFieldId ?? ''}
+              onChange={(e) =>
+                updateSettings({
+                  fieldOverrides: {
+                    ...settings.fieldOverrides,
+                    nwldFieldId: e.target.value || undefined,
+                  },
+                })
+              }
+              placeholder={nwldFieldId ?? 'customfield_XXXXX'}
               className="w-full border rounded px-3 py-2 text-sm font-mono"
             />
           </div>

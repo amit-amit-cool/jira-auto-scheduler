@@ -3,6 +3,7 @@ import { JiraConnectionForm } from '@/components/settings/JiraConnectionForm';
 import { ProjectSelector } from '@/components/settings/ProjectSelector';
 import { TeamMemberTable } from '@/components/settings/TeamMemberTable';
 import { ScheduleStartDate } from '@/components/settings/ScheduleStartDate';
+import { SchedulingMode } from '@/components/settings/SchedulingMode';
 import { AdvancedFields } from '@/components/settings/AdvancedFields';
 import { useSettings } from '@/hooks/useSettings';
 
@@ -36,6 +37,12 @@ export default function SettingsPage() {
 
       <section>
         <ScheduleStartDate />
+      </section>
+
+      <hr />
+
+      <section>
+        <SchedulingMode />
       </section>
 
       <hr />

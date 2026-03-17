@@ -9,6 +9,7 @@ export const defaultSettings: AppSettingsOutput = {
   selectedProjectKeys: [],
   teams: [],
   scheduleStartDate: new Date().toISOString().split('T')[0],
+  schedulingMode: 'collaborate',
   fieldOverrides: {},
 };
 

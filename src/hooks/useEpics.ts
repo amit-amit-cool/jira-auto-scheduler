@@ -10,6 +10,7 @@ interface EpicsResponse {
   epics: JiraEpic[];
   storyPointsFieldId: string | null;
   timeSpentFieldId: string | null;
+  nwldFieldId: string | null;
   total: number;
 }
 
@@ -21,7 +22,7 @@ const fetcher = (url: string, headers: Record<string, string>): Promise<EpicsRes
 
 export function useEpics() {
   const { settings, isLoaded } = useSettings();
-  const { storyPointsFieldId, timeSpentFieldId } = useFields();
+  const { storyPointsFieldId, timeSpentFieldId, nwldFieldId } = useFields();
   const serverConfig = useServerConfig();
   const headers = buildClientHeaders(settings);
 
@@ -34,10 +35,11 @@ export function useEpics() {
   const params = new URLSearchParams({ projects: projects.join(',') });
   if (storyPointsFieldId) params.set('storyPointsFieldId', storyPointsFieldId);
   if (timeSpentFieldId) params.set('timeSpentFieldId', timeSpentFieldId);
+  if (nwldFieldId) params.set('nwldFieldId', nwldFieldId);
 
   const { data, error, isLoading, mutate } = useSWR(
     isLoaded && hasCredentials && hasProjects && (storyPointsFieldId || timeSpentFieldId)
-      ? [`/api/jira/epics?${params}`, headers]
+      ? [`/api/jira/epics?${params}`, headers, nwldFieldId]
       : null,
     ([url, hdrs]) => fetcher(url, hdrs),
     { revalidateOnFocus: false }
@@ -47,6 +49,7 @@ export function useEpics() {
     epics: data?.epics ?? [],
     storyPointsFieldId: data?.storyPointsFieldId ?? storyPointsFieldId,
     timeSpentFieldId: data?.timeSpentFieldId ?? timeSpentFieldId,
+    nwldFieldId: data?.nwldFieldId ?? nwldFieldId,
     total: data?.total ?? 0,
     error,
     isLoading,

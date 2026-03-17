@@ -3,11 +3,9 @@ import { GanttTimeline } from '@/components/timeline/GanttTimeline';
 
 export default function TimelinePage() {
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Timeline</h1>
-        <p className="text-gray-500 mt-1">Gantt chart view of all team schedules.</p>
-      </div>
+    // Break out of max-w-7xl padding to use full viewport width
+    <div className="-mx-4 sm:-mx-6 lg:-mx-8 px-3">
+      <h1 className="text-xl font-bold mb-3">Timeline</h1>
       <GanttTimeline />
     </div>
   );

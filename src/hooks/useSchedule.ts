@@ -4,15 +4,21 @@ import { parseISO } from 'date-fns';
 import { useEpics } from './useEpics';
 import { useSettings } from './useSettings';
 import { scheduleEpics, EpicWithEstimate } from '@/lib/scheduler/algorithm';
-import { ScheduleResult } from '@/lib/scheduler/types';
+import { ScheduleResult, StatusCategory } from '@/lib/scheduler/types';
 import { TEAM_COLORS } from '@/types/app';
+
+function toStatusCategory(jiraKey: string): StatusCategory {
+  if (jiraKey === 'done') return 'done';
+  if (jiraKey === 'indeterminate') return 'inprogress';
+  return 'todo';
+}
 
 export function useSchedule(): {
   result: ScheduleResult | null;
   isLoading: boolean;
   error: Error | null;
 } {
-  const { epics, storyPointsFieldId, timeSpentFieldId, isLoading, error } = useEpics();
+  const { epics, storyPointsFieldId, timeSpentFieldId, nwldFieldId, isLoading, error } = useEpics();
   const { settings } = useSettings();
 
   const result = useMemo(() => {
@@ -36,7 +42,13 @@ export function useSchedule(): {
       const ts = timeSpentFieldId
         ? (epic.fields[timeSpentFieldId] as number | null) ?? 0
         : 0;
-      const remaining = Math.max(0, sp - ts);
+      const statusCatKey = epic.fields.status?.statusCategory?.key ?? 'new';
+      const statusCategory = toStatusCategory(statusCatKey);
+      // Done epics have 0 remaining regardless of fields
+      const remaining = statusCategory === 'done' ? 0 : Math.max(0, sp - ts);
+
+      const nwldRaw = nwldFieldId ? (epic.fields[nwldFieldId] as { value?: string } | string | null) : null;
+      const nwld = nwldRaw ? (typeof nwldRaw === 'string' ? nwldRaw : (nwldRaw as { value?: string }).value ?? null) : null;
 
       if (!epicsByProject.has(projectKey)) {
         epicsByProject.set(projectKey, []);
@@ -47,6 +59,9 @@ export function useSchedule(): {
         storyPoints: sp,
         timeSpentDays: ts,
         remainingDays: remaining,
+        status: epic.fields.status?.name ?? 'Unknown',
+        statusCategory,
+        nwld,
       });
     }
 
@@ -54,8 +69,8 @@ export function useSchedule(): {
       ? parseISO(settings.scheduleStartDate)
       : new Date();
 
-    return scheduleEpics(epicsByProject, settings.teams, startDate, colorMap);
-  }, [epics, storyPointsFieldId, timeSpentFieldId, settings.teams, settings.scheduleStartDate]);
+    return scheduleEpics(epicsByProject, settings.teams, startDate, colorMap, settings.schedulingMode ?? 'collaborate');
+  }, [epics, storyPointsFieldId, timeSpentFieldId, nwldFieldId, settings.teams, settings.scheduleStartDate, settings.schedulingMode]);
 
   return {
     result,

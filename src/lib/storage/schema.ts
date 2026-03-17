@@ -11,6 +11,7 @@ export const TeamConfigSchema = z.object({
   projectName: z.string(),
   members: z.array(TeamMemberSchema).default([]),
   color: z.string().default('#3B82F6'),
+  atlassianTeamId: z.string().optional(),
 });
 
 export const AppSettingsSchema = z.object({
@@ -20,9 +21,11 @@ export const AppSettingsSchema = z.object({
   selectedProjectKeys: z.array(z.string()).default([]),
   teams: z.array(TeamConfigSchema).default([]),
   scheduleStartDate: z.string().default(new Date().toISOString().split('T')[0]),
+  schedulingMode: z.enum(['one-per-epic', 'collaborate']).default('collaborate'),
   fieldOverrides: z.object({
     storyPointsFieldId: z.string().optional(),
     timeSpentFieldId: z.string().optional(),
+    nwldFieldId: z.string().optional(),
   }).default({}),
 });
 

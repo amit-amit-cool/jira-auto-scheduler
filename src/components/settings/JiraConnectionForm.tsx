@@ -7,15 +7,16 @@ export function JiraConnectionForm() {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
   const [serverConfig, setServerConfig] = useState<{ configured: boolean; baseUrl: string | null; email: string | null } | null>(null);
+  const [serverConfigLoaded, setServerConfigLoaded] = useState(false);
 
   useEffect(() => {
     fetch('/api/jira/server-config')
       .then((r) => r.json())
-      .then(setServerConfig)
-      .catch(() => setServerConfig({ configured: false, baseUrl: null, email: null }));
+      .then((data) => { setServerConfig(data); setServerConfigLoaded(true); })
+      .catch(() => { setServerConfig({ configured: false, baseUrl: null, email: null }); setServerConfigLoaded(true); });
   }, []);
 
-  const usingServer = serverConfig?.configured && !settings.jiraBaseUrl && !settings.jiraToken;
+  const usingServer = serverConfigLoaded && serverConfig?.configured && !settings.jiraBaseUrl && !settings.jiraToken;
 
   async function testConnection() {
     setTesting(true);

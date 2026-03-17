@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerCredentials } from '@/lib/jira/client';
-import { fetchProjectMembers, JiraUser } from '@/lib/jira/members';
+import { fetchProjectMembers } from '@/lib/jira/members';
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,11 +12,13 @@ export async function GET(request: NextRequest) {
     }
 
     const projectKey = searchParams.get('project');
+    const projectName = searchParams.get('projectName') ?? undefined;
+    const atlassianTeamId = searchParams.get('atlassianTeamId') ?? undefined;
     if (!projectKey) {
       return NextResponse.json({ error: 'No project key provided.' }, { status: 400 });
     }
 
-    const members = await fetchProjectMembers(projectKey, credentials);
+    const members = await fetchProjectMembers(projectKey, credentials, projectName, atlassianTeamId);
     return NextResponse.json({ members, projectKey });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

@@ -28,6 +28,7 @@ export function useFields() {
     fields: data?.fields ?? [],
     storyPointsFieldId: settings.fieldOverrides.storyPointsFieldId ?? data?.storyPointsFieldId ?? null,
     timeSpentFieldId: settings.fieldOverrides.timeSpentFieldId ?? data?.timeSpentFieldId ?? null,
+    nwldFieldId: settings.fieldOverrides.nwldFieldId ?? data?.nwldFieldId ?? null,
     error,
     isLoading,
   };

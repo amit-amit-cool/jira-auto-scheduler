@@ -1,5 +1,5 @@
 'use client';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import useSWR from 'swr';
 import { useSettings } from '@/hooks/useSettings';
 import { buildClientHeaders } from '@/lib/jira/clientHeaders';
@@ -12,39 +12,57 @@ const fetcher = (url: string, headers: Record<string, string>) =>
     return r.json();
   });
 
-function TeamSection({ team, onUpdate }: { team: TeamConfig; onUpdate: (t: TeamConfig) => void }) {
+function TeamSection({
+  team,
+  atlassianTeams,
+  onUpdate,
+}: {
+  team: TeamConfig;
+  atlassianTeams: Array<{ teamId: string; displayName: string }>;
+  onUpdate: (t: TeamConfig) => void;
+}) {
   const { settings } = useSettings();
   const headers = buildClientHeaders(settings);
 
+  const membersUrl = team.atlassianTeamId
+    ? `/api/jira/members?project=${team.projectKey}&atlassianTeamId=${encodeURIComponent(team.atlassianTeamId)}`
+    : `/api/jira/members?project=${team.projectKey}&projectName=${encodeURIComponent(team.projectName)}`;
+
   const { data, isLoading } = useSWR(
-    [`/api/jira/members?project=${team.projectKey}`, headers],
+    [membersUrl, headers],
     ([url, hdrs]) => fetcher(url, hdrs),
     { revalidateOnFocus: false }
   );
 
   const actors: JiraUser[] = data?.members ?? [];
 
-  // Sync fetched actors into team members once loaded, preserving existing hoursPerWeek
+  // Always keep a fresh ref to onUpdate so the effect never captures a stale closure
+  const onUpdateRef = useRef(onUpdate);
+  useEffect(() => { onUpdateRef.current = onUpdate; });
+
   useEffect(() => {
     if (actors.length === 0) return;
     const syncedMembers = actors.map((a) => {
       const existing = team.members.find((m) => m.accountId === a.accountId);
       return existing ?? { accountId: a.accountId, displayName: a.displayName, hoursPerWeek: 40 };
     });
-    // Only update if membership changed
     const currentIds = team.members.map((m) => m.accountId).sort().join(',');
     const newIds = syncedMembers.map((m) => m.accountId).sort().join(',');
     if (currentIds !== newIds) {
-      onUpdate({ ...team, members: syncedMembers });
+      onUpdateRef.current({ ...team, members: syncedMembers });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [actors.length, team.projectKey]);
+  }, [actors.length, team.projectKey, team.atlassianTeamId]);
 
   function updateMemberHours(accountId: string, hoursPerWeek: number) {
     const members = team.members.map((m) =>
       m.accountId === accountId ? { ...m, hoursPerWeek } : m
     );
     onUpdate({ ...team, members });
+  }
+
+  function updateAtlassianTeam(teamId: string) {
+    onUpdate({ ...team, atlassianTeamId: teamId || undefined, members: [] });
   }
 
   function updateColor(color: string) {
@@ -70,11 +88,27 @@ function TeamSection({ team, onUpdate }: { team: TeamConfig; onUpdate: (t: TeamC
           <h3 className="font-medium text-sm">{team.projectName}</h3>
           <span className="text-xs text-gray-400">{team.projectKey}</span>
         </div>
-        {isLoading && <span className="text-xs text-gray-400 ml-auto">Loading members…</span>}
+        {isLoading && <span className="text-xs text-gray-400 ml-auto">Loading…</span>}
       </div>
 
+      {atlassianTeams.length > 0 && (
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Atlassian Team</label>
+          <select
+            value={team.atlassianTeamId ?? ''}
+            onChange={(e) => updateAtlassianTeam(e.target.value)}
+            className="w-full border rounded px-2 py-1 text-sm"
+          >
+            <option value="">— auto-match by name —</option>
+            {atlassianTeams.map((t) => (
+              <option key={t.teamId} value={t.teamId}>{t.displayName}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {team.members.length === 0 && !isLoading && (
-        <p className="text-xs text-gray-400">No members found for this project.</p>
+        <p className="text-xs text-gray-400">No members found. Select the correct Atlassian team above.</p>
       )}
 
       <div className="space-y-2">
@@ -108,6 +142,14 @@ function TeamSection({ team, onUpdate }: { team: TeamConfig; onUpdate: (t: TeamC
 
 export function TeamMemberTable() {
   const { settings, updateSettings } = useSettings();
+  const headers = buildClientHeaders(settings);
+
+  const { data: teamsData } = useSWR(
+    ['/api/jira/atlassian-teams', headers],
+    ([url, hdrs]) => fetcher(url, hdrs),
+    { revalidateOnFocus: false }
+  );
+  const atlassianTeams: Array<{ teamId: string; displayName: string }> = teamsData?.teams ?? [];
 
   if (settings.selectedProjectKeys.length === 0) {
     return <p className="text-sm text-gray-400">Select projects above to configure teams.</p>;
@@ -128,7 +170,7 @@ export function TeamMemberTable() {
       </p>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {settings.teams.filter((t) => t.projectName.startsWith('Plus')).map((team) => (
-          <TeamSection key={team.projectKey} team={team} onUpdate={updateTeam} />
+          <TeamSection key={team.projectKey} team={team} atlassianTeams={atlassianTeams} onUpdate={updateTeam} />
         ))}
       </div>
     </div>

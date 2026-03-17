@@ -9,6 +9,7 @@ export interface TeamConfig {
   projectName: string;
   members: TeamMember[];
   color: string;
+  atlassianTeamId?: string;
 }
 
 export interface AppSettings {
@@ -18,6 +19,7 @@ export interface AppSettings {
   selectedProjectKeys: string[];
   teams: TeamConfig[];
   scheduleStartDate: string; // ISO date string
+  schedulingMode: 'one-per-epic' | 'collaborate';
   fieldOverrides: {
     storyPointsFieldId?: string;
     timeSpentFieldId?: string;
