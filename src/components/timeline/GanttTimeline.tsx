@@ -151,7 +151,7 @@ export function GanttTimeline() {
     savedSchedule, savedAt, phases,
     isScheduling, isSyncing, scheduleError,
     scheduleAndSave, syncFromJira, clearSchedule,
-    canSchedule, hasCredentials,
+    canSchedule, hasCredentials, effectiveTeams,
   } = usePhaseSchedule();
   const { snapshot: serverSnapshot, savedAt: serverSavedAt } = useServerSnapshot();
   const { settings, updateSettings } = useSettings();
@@ -553,7 +553,7 @@ export function GanttTimeline() {
               const filteredEnd   = activeEpics.length > 0
                 ? activeEpics.reduce((max, e) => e.endDate > max ? e.endDate : max, activeEpics[0].endDate)
                 : null;
-              const teamCfg       = settings.teams.find(t => t.projectKey === team.projectKey);
+              const teamCfg       = effectiveTeams.find(t => t.projectKey === team.projectKey);
               const memberCount   = teamCfg?.members.length ?? 0;
 
               return (

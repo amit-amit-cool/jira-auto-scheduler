@@ -12,6 +12,7 @@ interface EpicsResponse {
   timeSpentFieldId: string | null;
   nwldFieldId: string | null;
   total: number;
+  teams?: import('@/types/app').TeamConfig[];
 }
 
 const fetcher = (url: string, headers: Record<string, string>): Promise<EpicsResponse> =>
@@ -63,6 +64,7 @@ export function useEpics() {
     timeSpentFieldId: data?.timeSpentFieldId ?? timeSpentFieldId,
     nwldFieldId: data?.nwldFieldId ?? nwldFieldId,
     total: data?.total ?? 0,
+    snapshotTeams: snapshotData?.teams ?? null,
     hasCredentials,
     error,
     isLoading,

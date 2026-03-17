@@ -59,11 +59,11 @@ export function JiraConnectionForm() {
 
       const data = await res.json();
 
-      // Save to server snapshot so all users can access it
+      // Save to server snapshot so all users can access it (include team config)
       await fetch('/api/epics/snapshot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...data, teams: settings.teams }),
       });
 
       // Revalidate SWR caches

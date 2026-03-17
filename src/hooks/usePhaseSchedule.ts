@@ -116,7 +116,7 @@ function runSchedule(
 }
 
 export function usePhaseSchedule() {
-  const { epics, storyPointsFieldId, timeSpentFieldId, nwldFieldId, hasCredentials, mutate: epicsMutate } = useEpics();
+  const { epics, storyPointsFieldId, timeSpentFieldId, nwldFieldId, hasCredentials, snapshotTeams, mutate: epicsMutate } = useEpics();
   const { settings } = useSettings();
   const { savedSchedule, savedAt, saveSchedule, clearSchedule } = useAppStore();
   const { snapshot: serverSnapshot } = useServerSnapshot();
@@ -126,10 +126,10 @@ export function usePhaseSchedule() {
 
   const phases = savedSchedule ? getPhases(savedSchedule) : [];
 
-  // Use local teams if configured, otherwise fall back to teams from the server snapshot
+  // Use local teams if configured, otherwise fall back to imported snapshot teams, then schedule snapshot
   const effectiveTeams = settings.teams.length > 0
     ? settings.teams
-    : serverSnapshot ? teamsFromSnapshot(serverSnapshot) : [];
+    : snapshotTeams ?? (serverSnapshot ? teamsFromSnapshot(serverSnapshot) : []);
 
   /** Build EpicWithEstimate[] from Jira epics. */
   const buildFromJiraEpics = useCallback((): EpicWithEstimate[] => {
@@ -250,5 +250,6 @@ export function usePhaseSchedule() {
     clearSchedule,
     hasCredentials,
     canSchedule,
+    effectiveTeams,
   };
 }
