@@ -6,8 +6,40 @@ import { useSettings } from './useSettings';
 import { useAppStore } from '@/store/appStore';
 import { scheduleAllPhases, getPhases } from '@/lib/scheduler/phases';
 import { EpicWithEstimate } from '@/lib/scheduler/algorithm';
-import { StatusCategory } from '@/lib/scheduler/types';
+import { StatusCategory, ScheduleResult } from '@/lib/scheduler/types';
 import { TEAM_COLORS } from '@/types/app';
+import { mutate } from 'swr';
+
+async function pushSnapshotToServer(result: ScheduleResult) {
+  // Inline serialization: convert Dates to ISO strings
+  const serialized = {
+    ...result,
+    overallCompletionDate: result.overallCompletionDate?.toISOString() ?? null,
+    savedAt: new Date().toISOString(),
+    teams: result.teams.map((t) => ({
+      ...t,
+      completionDate: t.completionDate?.toISOString() ?? null,
+      epics: t.epics.map((e) => ({
+        ...e,
+        startDate: e.startDate.toISOString(),
+        endDate: e.endDate.toISOString(),
+      })),
+    })),
+  };
+
+  const secret = process.env.NEXT_PUBLIC_SCHEDULE_SECRET;
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (secret) headers['x-schedule-secret'] = secret;
+
+  await fetch('/api/schedule/snapshot', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(serialized),
+  });
+
+  // Revalidate the SWR cache for the snapshot hook
+  mutate('/api/schedule/snapshot');
+}
 
 function toStatusCategory(jiraKey: string): StatusCategory {
   if (jiraKey === 'done') return 'done';
@@ -84,6 +116,8 @@ export function usePhaseSchedule() {
       );
 
       saveSchedule(result);
+      // Push to server so anyone with the link can view the schedule
+      pushSnapshotToServer(result).catch(() => {/* non-fatal */});
     } catch (e) {
       setScheduleError(e instanceof Error ? e.message : 'Unknown error');
     } finally {

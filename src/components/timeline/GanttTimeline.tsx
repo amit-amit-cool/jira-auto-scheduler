@@ -10,6 +10,7 @@ import {
 } from 'date-fns';
 import { useSchedule } from '@/hooks/useSchedule';
 import { usePhaseSchedule } from '@/hooks/usePhaseSchedule';
+import { useServerSnapshot } from '@/hooks/useServerSnapshot';
 import { useSettings } from '@/hooks/useSettings';
 import { useServerConfig } from '@/hooks/useServerConfig';
 import { ScheduledEpic, StatusCategory } from '@/lib/scheduler/types';
@@ -151,12 +152,14 @@ export function GanttTimeline() {
     isScheduling, scheduleError,
     scheduleAndSave, clearSchedule, canSchedule,
   } = usePhaseSchedule();
+  const { snapshot: serverSnapshot, savedAt: serverSavedAt } = useServerSnapshot();
   const { settings, updateSettings } = useSettings();
   const serverConfig = useServerConfig();
   const jiraBaseUrl = serverConfig.baseUrl || settings.jiraBaseUrl;
 
-  // Prefer saved schedule; fall back to live
-  const result = savedSchedule ?? liveResult;
+  // Prefer server snapshot (shareable) → local saved → live calculation
+  const result = serverSnapshot ?? savedSchedule ?? liveResult;
+  const effectiveSavedAt = serverSavedAt ?? savedAt;
 
   const [collapsed,  setCollapsed]  = useState<Set<string>>(new Set());
   const [dayPxState, setDayPxState] = useState(14);
@@ -339,9 +342,10 @@ export function GanttTimeline() {
     });
   }, [savedSchedule, phases]);
 
-  if (isLoading && !savedSchedule) return <Placeholder>Calculating schedule…</Placeholder>;
-  if (error && !savedSchedule)     return <Placeholder error>Error: {error.message}</Placeholder>;
-  if (!result)                     return <Placeholder>Select projects in Settings to see the timeline.</Placeholder>;
+  const hasSnapshot = !!(serverSnapshot || savedSchedule);
+  if (isLoading && !hasSnapshot) return <Placeholder>Calculating schedule…</Placeholder>;
+  if (error && !hasSnapshot)     return <Placeholder error>Error: {error.message}</Placeholder>;
+  if (!result)                   return <Placeholder>Select projects in Settings to see the timeline.</Placeholder>;
 
   const filteredAllEpics = result.teams.flatMap(t =>
     nwldFilter === 'all' ? t.epics : t.epics.filter(e => e.nwld === nwldFilter)
@@ -361,15 +365,18 @@ export function GanttTimeline() {
         >
           {isScheduling ? '⏳ Scheduling…' : '🗓 Schedule All Phases & Save'}
         </button>
-        {savedSchedule && (
+        {(serverSnapshot || savedSchedule) && (
           <>
             <span className="text-xs text-gray-400">
-              Saved{savedAt ? ` ${format(savedAt, 'MMM d, HH:mm')}` : ''} · showing snapshot
+              {serverSnapshot ? '🌐 Published' : '💾 Local'}
+              {effectiveSavedAt ? ` · ${format(effectiveSavedAt, 'MMM d, HH:mm')}` : ''}
             </span>
-            <button
-              onClick={clearSchedule}
-              className="text-xs text-gray-400 underline hover:text-gray-600"
-            >clear</button>
+            {savedSchedule && (
+              <button
+                onClick={clearSchedule}
+                className="text-xs text-gray-400 underline hover:text-gray-600"
+              >clear local</button>
+            )}
           </>
         )}
         {scheduleError && <span className="text-xs text-red-500">{scheduleError}</span>}

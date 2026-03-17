@@ -34,7 +34,7 @@ function serializeResult(result: ScheduleResult): SerializedScheduleResult {
   };
 }
 
-function deserializeResult(s: SerializedScheduleResult): ScheduleResult {
+export function deserializeResult(s: SerializedScheduleResult): ScheduleResult {
   return {
     ...s,
     overallCompletionDate: s.overallCompletionDate ? new Date(s.overallCompletionDate) : null,

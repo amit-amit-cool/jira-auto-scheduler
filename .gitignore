@@ -28,6 +28,9 @@
 *.tsbuildinfo
 next-env.d.ts
 
+# schedule snapshot (contains exported Jira data — do not commit)
+/data/schedule-snapshot.json
+
 # misc
 .DS_Store
 *.pem
