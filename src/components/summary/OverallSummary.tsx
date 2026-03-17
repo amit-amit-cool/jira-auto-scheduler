@@ -19,20 +19,17 @@ export function OverallSummary() {
   const today = new Date();
 
   const result = savedSchedule ?? liveResult;
-
-  if (isLoading && !savedSchedule) return <div className="p-8 text-center text-gray-500">Calculating schedule…</div>;
-  if (error && !savedSchedule) return <div className="p-8 text-center text-red-500">Error: {error.message}</div>;
-  if (!result) return <div className="p-8 text-center text-gray-400">Configure settings to see the summary.</div>;
-
   const phases = savedSchedule ? getPhases(savedSchedule) : [];
 
   const nwldValues = useMemo(() => {
+    if (!result) return [];
     const vals = new Set<string>();
     result.teams.forEach(t => t.epics.forEach(e => { if (e.nwld) vals.add(e.nwld); }));
     return Array.from(vals).sort((a, b) => nwldOrder(a) - nwldOrder(b));
   }, [result]);
 
   const filteredTeams = useMemo(() => {
+    if (!result) return [];
     if (nwldFilter === 'all') return result.teams;
     return result.teams
       .map(t => {
@@ -48,15 +45,14 @@ export function OverallSummary() {
   }, [result, nwldFilter]);
 
   const filteredCompletionDate = useMemo(() => {
+    if (!result) return null;
     if (nwldFilter !== 'all') {
-      const allEpics = filteredTeams.flatMap(t => t.epics);
-      const dates = allEpics.map(e => e.endDate);
+      const dates = filteredTeams.flatMap(t => t.epics).map(e => e.endDate);
       return dates.length ? new Date(Math.max(...dates.map(d => d.getTime()))) : null;
     }
     return result.overallCompletionDate;
   }, [filteredTeams, nwldFilter, result]);
 
-  // Per-phase completion dates (when savedSchedule exists)
   const phaseCompletions = useMemo(() => {
     if (!savedSchedule || phases.length === 0) return [];
     return phases.map(phase => {
@@ -67,6 +63,10 @@ export function OverallSummary() {
       return { phase, completionDate, epicCount: epics.length };
     });
   }, [savedSchedule, phases]);
+
+  if (isLoading && !savedSchedule) return <div className="p-8 text-center text-gray-500">Calculating schedule…</div>;
+  if (error && !savedSchedule) return <div className="p-8 text-center text-red-500">Error: {error.message}</div>;
+  if (!result) return <div className="p-8 text-center text-gray-400">Configure settings to see the summary.</div>;
 
   const filteredTotalEpics = filteredTeams.reduce((s, t) => s + t.epics.length, 0);
   const filteredRemainingDays = filteredTeams.reduce((s, t) => s + t.epics.reduce((ss, e) => ss + e.remainingDays, 0), 0);

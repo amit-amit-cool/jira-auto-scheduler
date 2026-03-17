@@ -3,11 +3,16 @@ import { useState, useMemo } from 'react';
 import { format } from 'date-fns';
 import { useSchedule } from '@/hooks/useSchedule';
 import { useEpics } from '@/hooks/useEpics';
+import { useSettings } from '@/hooks/useSettings';
+import { useServerConfig } from '@/hooks/useServerConfig';
 import { ScheduledEpic } from '@/lib/scheduler/types';
 
 export function EpicTable() {
   const { result, isLoading, error } = useSchedule();
   const { total } = useEpics();
+  const { settings } = useSettings();
+  const serverConfig = useServerConfig();
+  const jiraBaseUrl = serverConfig.baseUrl || settings.jiraBaseUrl;
   const [teamFilter, setTeamFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
 
@@ -80,7 +85,16 @@ export function EpicTable() {
           <tbody className="divide-y">
             {filtered.map((epic: ScheduledEpic) => (
               <tr key={epic.id} className="hover:bg-gray-50">
-                <td className="px-4 py-2 font-mono text-xs text-blue-600">{epic.key}</td>
+                <td className="px-4 py-2 font-mono text-xs">
+                  {jiraBaseUrl ? (
+                    <a href={`${jiraBaseUrl}/browse/${epic.key}`} target="_blank" rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline">
+                      {epic.key}
+                    </a>
+                  ) : (
+                    <span className="text-blue-600">{epic.key}</span>
+                  )}
+                </td>
                 <td className="px-4 py-2 max-w-xs truncate">{epic.summary}</td>
                 <td className="px-4 py-2">
                   <span

@@ -11,11 +11,12 @@ import {
 import { useSchedule } from '@/hooks/useSchedule';
 import { usePhaseSchedule } from '@/hooks/usePhaseSchedule';
 import { useSettings } from '@/hooks/useSettings';
+import { useServerConfig } from '@/hooks/useServerConfig';
 import { ScheduledEpic, StatusCategory } from '@/lib/scheduler/types';
 
 // ─── Layout constants ─────────────────────────────────────────────────────────
 const ROW_H      = 36;
-const TEAM_H     = 44;
+const TEAM_H     = 56;
 const HEADER_H   = 56;
 const COL_NAME   = 200;
 const COL_STATUS = 90;
@@ -151,11 +152,13 @@ export function GanttTimeline() {
     scheduleAndSave, clearSchedule, canSchedule,
   } = usePhaseSchedule();
   const { settings, updateSettings } = useSettings();
+  const serverConfig = useServerConfig();
+  const jiraBaseUrl = serverConfig.baseUrl || settings.jiraBaseUrl;
 
   // Prefer saved schedule; fall back to live
   const result = savedSchedule ?? liveResult;
 
-  const [expanded,   setExpanded]   = useState<Set<string>>(new Set());
+  const [collapsed,  setCollapsed]  = useState<Set<string>>(new Set());
   const [dayPxState, setDayPxState] = useState(14);
   const [tooltip,    setTooltip]    = useState<TooltipData | null>(null);
   const [toast,      setToast]      = useState<ToastInfo | null>(null);
@@ -170,19 +173,17 @@ export function GanttTimeline() {
   useEffect(() => { dayPxRef.current = dayPxState; }, [dayPxState]);
 
   // ── Derived ──
-  const allKeys = useMemo(() => new Set(result?.teams.map((t) => t.projectKey) ?? []), [result]);
-  const displayExpanded = expanded.size === 0 && allKeys.size > 0 ? allKeys : expanded;
+  const allKeys = useMemo(() => (result?.teams.map((t) => t.projectKey) ?? []), [result]);
 
   const toggleTeam  = useCallback((key: string) => {
-    setExpanded((prev) => {
-      const base = prev.size === 0 ? allKeys : prev;
-      const next = new Set(base);
+    setCollapsed((prev) => {
+      const next = new Set(prev);
       next.has(key) ? next.delete(key) : next.add(key);
       return next;
     });
-  }, [allKeys]);
-  const expandAll   = useCallback(() => setExpanded(new Set(allKeys)), [allKeys]);
-  const collapseAll = useCallback(() => setExpanded(new Set()), []);
+  }, []);
+  const expandAll   = useCallback(() => setCollapsed(new Set()), []);
+  const collapseAll = useCallback(() => setCollapsed(new Set(allKeys)), [allKeys]);
 
   const startDate = useMemo(() =>
     parseISO(settings.scheduleStartDate || new Date().toISOString().split('T')[0]),
@@ -527,7 +528,7 @@ export function GanttTimeline() {
           {/* Left panel — stays in place while right panel scrolls horizontally */}
           <div className="flex-shrink-0 border-r bg-white" style={{ width: LEFT_W }}>
             {result.teams.map((team) => {
-              const isOpen        = displayExpanded.has(team.projectKey);
+              const isOpen        = !collapsed.has(team.projectKey);
               const filteredEpics = nwldFilter === 'all'
                 ? team.epics
                 : team.epics.filter(e => e.nwld === nwldFilter);
@@ -558,11 +559,10 @@ export function GanttTimeline() {
                       <span className="ml-auto text-xs text-gray-400 flex-shrink-0 pr-1">{filteredEpics.length}</span>
                     </div>
                     <Cell w={COL_STATUS} h={TEAM_H} align="left">
-                      <div className="flex flex-col gap-0.5">
+                      <div className="flex flex-col gap-1.5">
                         <span className="text-xs text-gray-500">{activeEpics.length} active</span>
-                        <span className="text-xs text-gray-400">
-                          {memberCount} member{memberCount !== 1 ? 's' : ''} · {team.weeklyCapacityDays.toFixed(1)}d/wk
-                        </span>
+                        <span className="text-xs text-gray-400">{memberCount} member{memberCount !== 1 ? 's' : ''}</span>
+                        <span className="text-xs text-gray-400">{team.weeklyCapacityDays.toFixed(1)}d/wk</span>
                       </div>
                     </Cell>
                     <Cell w={COL_NWLD}   h={TEAM_H} align="left"><span className="text-xs text-gray-300">—</span></Cell>
@@ -579,7 +579,15 @@ export function GanttTimeline() {
                     <div key={epic.id} className="flex items-center border-b hover:bg-blue-50" style={{ height: ROW_H }}>
                       <div className="flex items-center gap-1.5 px-2 border-r border-gray-100 overflow-hidden"
                         style={{ width: COL_NAME, height: ROW_H }}>
-                        <span className="font-mono text-blue-500 flex-shrink-0 text-xs" style={{ minWidth: 52 }}>{epic.key}</span>
+                        {jiraBaseUrl ? (
+                          <a href={`${jiraBaseUrl}/browse/${epic.key}`} target="_blank" rel="noopener noreferrer"
+                            className="font-mono text-blue-500 flex-shrink-0 text-xs hover:underline" style={{ minWidth: 52 }}
+                            onClick={e => e.stopPropagation()}>
+                            {epic.key}
+                          </a>
+                        ) : (
+                          <span className="font-mono text-blue-500 flex-shrink-0 text-xs" style={{ minWidth: 52 }}>{epic.key}</span>
+                        )}
                         <span className="truncate text-xs text-gray-600">{epic.summary}</span>
                       </div>
                       <Cell w={COL_STATUS} h={ROW_H} align="left">
@@ -619,7 +627,7 @@ export function GanttTimeline() {
           >
             <div style={{ width: timelineWidth, position: 'relative', minWidth: '100%' }}>
               {result.teams.map((team) => {
-                const isOpen        = displayExpanded.has(team.projectKey);
+                const isOpen        = !collapsed.has(team.projectKey);
                 const filteredEpics = nwldFilter === 'all'
                   ? team.epics
                   : team.epics.filter(e => e.nwld === nwldFilter);
@@ -689,14 +697,14 @@ export function GanttTimeline() {
         ))}
       </div>
 
-      {tooltip && <EpicTooltip data={tooltip} onClose={() => setTooltip(null)} />}
+      {tooltip && <EpicTooltip data={tooltip} onClose={() => setTooltip(null)} jiraBaseUrl={jiraBaseUrl ?? ''} />}
       {toast    && <ScheduleToast info={toast} onClose={() => setToast(null)} />}
     </div>
   );
 }
 
 // ─── Tooltip ──────────────────────────────────────────────────────────────────
-function EpicTooltip({ data }: { data: TooltipData; onClose: () => void }) {
+function EpicTooltip({ data, jiraBaseUrl }: { data: TooltipData; onClose: () => void; jiraBaseUrl: string }) {
   const { epic } = data;
   const isDone = epic.statusCategory === 'done';
   const pct    = epic.storyPoints > 0 ? clamp(Math.round((epic.timeSpentDays / epic.storyPoints) * 100), 0, 100) : 0;
@@ -704,7 +712,14 @@ function EpicTooltip({ data }: { data: TooltipData; onClose: () => void }) {
     <div className="fixed z-50 bg-white border rounded-xl shadow-xl p-4 text-sm space-y-2 pointer-events-none"
       style={{ left: clamp(data.x, 8, (typeof window !== 'undefined' ? window.innerWidth : 1200) - 272), top: data.y - 8, width: 264 }}>
       <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-xs" style={{ color: epic.color }}>{epic.key}</span>
+        {jiraBaseUrl ? (
+          <a href={`${jiraBaseUrl}/browse/${epic.key}`} target="_blank" rel="noopener noreferrer"
+            className="font-mono text-xs hover:underline pointer-events-auto" style={{ color: epic.color }}>
+            {epic.key} ↗
+          </a>
+        ) : (
+          <span className="font-mono text-xs" style={{ color: epic.color }}>{epic.key}</span>
+        )}
         <StatusBadge label={epic.status} cat={epic.statusCategory} />
       </div>
       <div className="font-medium text-gray-900 leading-snug">{epic.summary}</div>

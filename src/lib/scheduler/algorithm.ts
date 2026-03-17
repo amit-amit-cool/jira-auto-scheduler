@@ -14,6 +14,12 @@ export interface EpicWithEstimate {
   nwld: string | null;
 }
 
+function nwldPriority(nwld: string | null): number {
+  if (!nwld) return 9999;
+  const m = nwld.match(/v(\d+)/i);
+  return m ? parseInt(m[1]) : 9998;
+}
+
 function normalizeToBusinessDay(date: Date): Date {
   let d = new Date(date);
   while (isWeekend(d)) {
@@ -62,9 +68,19 @@ export function scheduleEpics(
     const doneEpics = epicsForTeam.filter(
       (e) => e.statusCategory === 'done' || e.remainingDays === 0
     );
-    const activeEpics = epicsForTeam.filter(
-      (e) => e.statusCategory !== 'done' && e.remainingDays > 0
-    );
+    // Priority order:
+    //   1. In-progress first (already started → finish soonest)
+    //   2. Then by NWLD wave (V1 → V2 → V3 → V4 → other → unlabelled)
+    //      so the team completes each wave before moving to the next
+    //   3. Within the same wave, preserve original Jira rank
+    const activeEpics = epicsForTeam
+      .filter((e) => e.statusCategory !== 'done' && e.remainingDays > 0)
+      .sort((a, b) => {
+        const statusRank = (s: StatusCategory) => s === 'inprogress' ? 0 : 1;
+        const sd = statusRank(a.statusCategory) - statusRank(b.statusCategory);
+        if (sd !== 0) return sd;
+        return nwldPriority(a.nwld) - nwldPriority(b.nwld);
+      });
 
     const scheduledEpics: ScheduledEpic[] = [];
 
@@ -124,33 +140,63 @@ export function scheduleEpics(
     const memberAvailability: Date[] = team.members.map(() => new Date(normalizedStart));
 
     if (schedulingMode === 'one-per-epic') {
-      // Greedy: assign each epic to whichever member is free soonest
-      for (const item of activeEpics) {
+      // Wave-gated greedy: each member works solo on one epic.
+      // A member who becomes free will not start a higher-wave epic while a
+      // lower-wave epic is still running — they wait until the wave clears.
+      const remaining = [...activeEpics];
+      // Track assigned-but-not-yet-done epics so we know which wave is active
+      const inFlight: { wave: number; epicEnd: Date }[] = [];
+
+      while (remaining.length > 0 || inFlight.length > 0) {
         let fastestIdx = 0;
         for (let i = 1; i < memberAvailability.length; i++) {
           if (memberAvailability[i] < memberAvailability[fastestIdx]) fastestIdx = i;
         }
+        const freeAt = normalizeToBusinessDay(memberAvailability[fastestIdx]);
 
-        const member = team.members[fastestIdx];
-        const epicStart = normalizeToBusinessDay(memberAvailability[fastestIdx]);
-        const fullTimeRatio = member.hoursPerWeek / 40;
-        const durationBusinessDays = fullTimeRatio > 0
-          ? Math.ceil(item.remainingDays / fullTimeRatio)
-          : 0;
-        const epicEnd = durationBusinessDays > 0
-          ? addBusinessDays(epicStart, durationBusinessDays - 1)
-          : epicStart;
+        // Remove completed in-flight entries
+        for (let i = inFlight.length - 1; i >= 0; i--) {
+          if (inFlight[i].epicEnd < freeAt) inFlight.splice(i, 1);
+        }
 
-        scheduledEpics.push({
-          id: item.epic.id, key: item.epic.key, summary: item.epic.fields.summary,
-          projectKey: team.projectKey, storyPoints: item.storyPoints,
-          timeSpentDays: item.timeSpentDays, remainingDays: item.remainingDays,
-          startDate: epicStart, endDate: epicEnd, color,
-          status: item.status, statusCategory: item.statusCategory, nwld: item.nwld,
-          assignedTo: member.displayName,
-        });
+        // Lowest wave still active (unassigned or running)
+        const allWaves = [
+          ...remaining.map(e => nwldPriority(e.nwld)),
+          ...inFlight.map(e => e.wave),
+        ];
+        const minWave = allWaves.length > 0 ? Math.min(...allWaves) : Infinity;
 
-        memberAvailability[fastestIdx] = getNextBusinessDay(epicEnd);
+        // Find next epic: Jira in-progress first, then lowest-wave todo
+        let nextIdx = remaining.findIndex(e => e.statusCategory === 'inprogress');
+        if (nextIdx < 0) {
+          nextIdx = remaining.findIndex(
+            e => e.statusCategory !== 'inprogress' && nwldPriority(e.nwld) === minWave
+          );
+        }
+
+        if (nextIdx >= 0) {
+          const item = remaining.splice(nextIdx, 1)[0];
+          const member = team.members[fastestIdx];
+          const ratio = member.hoursPerWeek / 40;
+          const duration = ratio > 0 ? Math.ceil(item.remainingDays / ratio) : 0;
+          const epicEnd = duration > 0 ? addBusinessDays(freeAt, duration - 1) : freeAt;
+          scheduledEpics.push({
+            id: item.epic.id, key: item.epic.key, summary: item.epic.fields.summary,
+            projectKey: team.projectKey, storyPoints: item.storyPoints,
+            timeSpentDays: item.timeSpentDays, remainingDays: item.remainingDays,
+            startDate: freeAt, endDate: epicEnd, color,
+            status: item.status, statusCategory: item.statusCategory, nwld: item.nwld,
+            assignedTo: member.displayName,
+          });
+          inFlight.push({ wave: nwldPriority(item.nwld), epicEnd });
+          memberAvailability[fastestIdx] = getNextBusinessDay(epicEnd);
+        } else {
+          // Current wave is all assigned but still running — wait for it to finish
+          const waveEnd = inFlight
+            .filter(e => e.wave === minWave)
+            .reduce((max, e) => e.epicEnd > max ? e.epicEnd : max, new Date(0));
+          memberAvailability[fastestIdx] = getNextBusinessDay(waveEnd);
+        }
       }
     } else {
       // Collaborate-when-idle mode:
@@ -173,6 +219,40 @@ export function scheduleEpics(
 
       const unstarted = [...activeEpics];
       const inProgress: ActiveEpicState[] = [];
+
+      // Returns the next epic to assign, respecting wave-gating:
+      //   - Jira in-progress epics are always assigned immediately (can't block work already started)
+      //   - Todo epics: only pick from the lowest wave that still has active work
+      //     (unstarted OR in-progress), so V1 is fully done before any member starts V2.
+      const nextToAssign = (): { item: EpicWithEstimate; idx: number } | null => {
+        // 1. Jira in-progress epics — no wave gate
+        const ipIdx = unstarted.findIndex(e => e.statusCategory === 'inprogress');
+        if (ipIdx >= 0) return { item: unstarted[ipIdx], idx: ipIdx };
+
+        // 2. Lowest active wave across unstarted todos + in-progress scheduled epics
+        const waves = [
+          ...unstarted.map(e => nwldPriority(e.nwld)),
+          ...inProgress.map(e => nwldPriority(e.item.nwld)),
+        ];
+        if (waves.length === 0) return null;
+        const minWave = Math.min(...waves);
+
+        const idx = unstarted.findIndex(
+          e => e.statusCategory !== 'inprogress' && nwldPriority(e.nwld) === minWave
+        );
+        return idx >= 0 ? { item: unstarted[idx], idx } : null;
+      }
+
+      // Returns the in-progress epic a free member should join when the queue is
+      // blocked (current wave has no unstarted epics left, only running ones).
+      const targetToJoin = (): ActiveEpicState | null => {
+        // Join within the lowest active wave only
+        const waves = inProgress.map(e => nwldPriority(e.item.nwld));
+        if (waves.length === 0) return null;
+        const minWave = Math.min(...waves);
+        const candidates = inProgress.filter(e => nwldPriority(e.item.nwld) === minWave);
+        return candidates.reduce((latest, e) => e.epicEnd > latest.epicEnd ? e : latest);
+      }
 
       while (unstarted.length > 0 || inProgress.length > 0) {
         // Find which member becomes free soonest
@@ -199,9 +279,11 @@ export function scheduleEpics(
           }
         }
 
-        if (unstarted.length > 0) {
-          // Assign next unstarted epic to this member (solo)
-          const item = unstarted.shift()!;
+        const next = nextToAssign();
+        if (next) {
+          // Assign this epic to the free member (solo start)
+          unstarted.splice(next.idx, 1);
+          const item = next.item;
           const ratio = team.members[fastestIdx].hoursPerWeek / 40;
           const duration = ratio > 0 ? Math.ceil(item.remainingDays / ratio) : 0;
           const epicEnd = duration > 0 ? addBusinessDays(freeAt, duration - 1) : freeAt;
@@ -212,10 +294,8 @@ export function scheduleEpics(
           memberAvailability[fastestIdx] = getNextBusinessDay(epicEnd);
 
         } else if (inProgress.length > 0) {
-          // Queue empty — join the latest-finishing in-progress epic
-          const target = inProgress.reduce((latest, e) =>
-            e.epicEnd > latest.epicEnd ? e : latest
-          );
+          // Current wave has no unstarted left — join the latest-finishing epic in this wave
+          const target = targetToJoin()!;
 
           // How much work has been done in the current phase up to now?
           const elapsed = Math.max(0, differenceInBusinessDays(freeAt, target.phaseStart));
