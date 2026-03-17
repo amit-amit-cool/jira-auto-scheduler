@@ -7,7 +7,6 @@ const SESSION_TOKEN = process.env.SITE_SESSION_TOKEN ?? '';
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Always allow the login page and auth API
   if (pathname.startsWith('/login') || pathname.startsWith('/api/auth')) {
     return NextResponse.next();
   }

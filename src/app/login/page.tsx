@@ -1,9 +1,8 @@
 'use client';
 import { useState, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 
 function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -17,16 +16,22 @@ function LoginForm() {
     setLoading(true);
     setError('');
 
-    const res = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    });
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
 
-    if (res.ok) {
-      window.location.href = from;
-    } else {
-      setError('Incorrect email or password.');
+      if (res.ok) {
+        window.location.href = from;
+      } else {
+        const data = await res.json();
+        setError(data.error || 'Login failed');
+        setLoading(false);
+      }
+    } catch {
+      setError('Network error — please try again');
       setLoading(false);
     }
   }
@@ -34,7 +39,7 @@ function LoginForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <input
-        type="email"
+        type="text"
         value={username}
         onChange={(e) => setUsername(e.target.value)}
         placeholder="Email"
