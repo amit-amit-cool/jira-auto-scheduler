@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* frappe-gantt overrides */
+.gantt-container {
+  min-height: 300px;
+}
+
+.gantt .bar-wrapper:hover .bar {
+  opacity: 0.85;
+}
+
+.gantt .bar-progress {
+  fill: #3b82f6;
+}
