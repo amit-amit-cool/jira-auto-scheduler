@@ -2,6 +2,7 @@
 import { useEffect, useRef } from 'react';
 import { format } from 'date-fns';
 import { useSchedule } from '@/hooks/useSchedule';
+import { usePublish } from '@/hooks/usePublish';
 import { ScheduledEpic } from '@/lib/scheduler/types';
 
 // frappe-gantt task type
@@ -18,6 +19,7 @@ export function GanttChart() {
   const containerRef = useRef<HTMLDivElement>(null);
   const ganttRef = useRef<unknown>(null);
   const { result, isLoading, error } = useSchedule();
+  const { publish, isPublishing, result: publishResult, error: publishError } = usePublish();
 
   useEffect(() => {
     if (!result || !containerRef.current) return;
@@ -79,21 +81,40 @@ export function GanttChart() {
         ))}
       </div>
 
-      {/* View mode buttons */}
-      <div className="flex gap-2">
-        {(['Day', 'Week', 'Month', 'Quarter Year'] as const).map((mode) => (
+      {/* View mode buttons + Publish */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex gap-2">
+          {(['Day', 'Week', 'Month', 'Quarter Year'] as const).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => {
+                if (ganttRef.current) {
+                  (ganttRef.current as { change_view_mode: (m: string) => void }).change_view_mode(mode);
+                }
+              }}
+              className="px-3 py-1 text-sm border rounded hover:bg-gray-50"
+            >
+              {mode}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-3">
+          {publishResult && (
+            <span className="text-sm text-green-600">
+              ✓ Published {publishResult.succeeded}/{publishResult.total} epics to Jira
+            </span>
+          )}
+          {publishError && (
+            <span className="text-sm text-red-500">{publishError}</span>
+          )}
           <button
-            key={mode}
-            onClick={() => {
-              if (ganttRef.current) {
-                (ganttRef.current as { change_view_mode: (m: string) => void }).change_view_mode(mode);
-              }
-            }}
-            className="px-3 py-1 text-sm border rounded hover:bg-gray-50"
+            onClick={publish}
+            disabled={isPublishing}
+            className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {mode}
+            {isPublishing ? 'Publishing…' : 'Publish to Jira'}
           </button>
-        ))}
+        </div>
       </div>
 
       <div className="overflow-x-auto">
