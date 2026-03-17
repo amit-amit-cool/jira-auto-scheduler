@@ -4,16 +4,18 @@ export interface JiraCredentials {
   token: string;
 }
 
+const DEFAULT_JIRA_BASE_URL = process.env.NEXT_PUBLIC_JIRA_BASE_URL ?? '';
+const DEFAULT_JIRA_EMAIL = process.env.NEXT_PUBLIC_JIRA_EMAIL ?? '';
+
 export function getServerCredentials(headers?: Headers): JiraCredentials {
-  // Allow per-request override via X-Jira-* headers (multi-user mode)
   const baseUrl =
     headers?.get('X-Jira-Url') ||
     process.env.JIRA_BASE_URL ||
-    '';
+    DEFAULT_JIRA_BASE_URL;
   const email =
     headers?.get('X-Jira-Email') ||
     process.env.JIRA_EMAIL ||
-    '';
+    DEFAULT_JIRA_EMAIL;
   const token =
     headers?.get('X-Jira-Token') ||
     process.env.JIRA_API_TOKEN ||

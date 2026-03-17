@@ -1,5 +1,5 @@
 import { addDays, isWeekend } from 'date-fns';
-import { ScheduleResult, TeamSchedule } from './types';
+import { ScheduleResult, TeamSchedule, ScheduledEpic } from './types';
 import { scheduleEpics, EpicWithEstimate } from './algorithm';
 import { TeamConfig } from '@/types/app';
 
@@ -14,19 +14,18 @@ function sortPhaseKeys(keys: string[]): string[] {
     // null/empty goes last
     if (!a) return 1;
     if (!b) return -1;
-    // Extract trailing number for natural sort: v1 < v2 < v10
-    const numA = parseInt(a.replace(/\D/g, ''), 10);
-    const numB = parseInt(b.replace(/\D/g, ''), 10);
+    // Extract the number immediately after the leading V: "V1 Q3 2025" → 1
+    const numA = parseInt(a.match(/^[Vv](\d+)/)?.[1] ?? '', 10);
+    const numB = parseInt(b.match(/^[Vv](\d+)/)?.[1] ?? '', 10);
     if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
     return a.localeCompare(b);
   });
 }
 
 /**
- * Schedules all epics grouped by NWLD phase (v1, v2, v3, v4…) sequentially.
- * v1 is scheduled first; v2 starts the business day after v1 completes; etc.
- * Returns a merged ScheduleResult covering all phases, with each epic tagged
- * with its original nwld value so the UI can filter by phase.
+ * Schedules all epics grouped by NWLD phase (v1, v2, v3, v4…) sequentially,
+ * independently per team. Each team starts its next phase the business day
+ * after it finishes its current phase — it does not wait for other teams.
  */
 export function scheduleAllPhases(
   allEpics: EpicWithEstimate[],
@@ -35,67 +34,77 @@ export function scheduleAllPhases(
   colorMap: Map<string, string>,
   schedulingMode: 'one-per-epic' | 'collaborate'
 ): ScheduleResult {
-  // Group by nwld
-  const phaseMap = new Map<string, EpicWithEstimate[]>();
-  for (const epic of allEpics) {
-    const key = epic.nwld ?? '';
-    if (!phaseMap.has(key)) phaseMap.set(key, []);
-    phaseMap.get(key)!.push(epic);
-  }
+  // Sorted unique phase keys across all epics
+  const sortedPhases = sortPhaseKeys(
+    Array.from(new Set(allEpics.map((e) => e.nwld ?? '').filter(Boolean)))
+  );
 
-  const sortedKeys = sortPhaseKeys(Array.from(phaseMap.keys()));
+  const teamSchedules: TeamSchedule[] = [];
 
-  // Merge structure: one TeamSchedule per team, accumulating epics across phases
-  const teamMap = new Map<string, TeamSchedule>();
+  for (const team of teams) {
+    const color = colorMap.get(team.projectKey) || '#3B82F6';
+    const weeklyCapacityDays = team.members.reduce((sum, m) => sum + m.hoursPerWeek / 8, 0);
 
-  let phaseStart = startDate;
-
-  for (const phaseKey of sortedKeys) {
-    const phaseEpics = phaseMap.get(phaseKey)!;
-
-    // Build epicsByProject for this phase
-    const epicsByProject = new Map<string, EpicWithEstimate[]>();
-    for (const epic of phaseEpics) {
-      if (!epicsByProject.has(epic.projectKey)) epicsByProject.set(epic.projectKey, []);
-      epicsByProject.get(epic.projectKey)!.push(epic);
+    // Group this team's epics by phase
+    const byPhase = new Map<string, EpicWithEstimate[]>();
+    for (const epic of allEpics.filter((e) => e.projectKey === team.projectKey)) {
+      const key = epic.nwld ?? '';
+      if (!byPhase.has(key)) byPhase.set(key, []);
+      byPhase.get(key)!.push(epic);
     }
 
-    const phaseResult = scheduleEpics(epicsByProject, teams, phaseStart, colorMap, schedulingMode);
+    let phaseStart = startDate;
+    const scheduledEpics: ScheduledEpic[] = [];
 
-    // Merge into teamMap
-    for (const team of phaseResult.teams) {
-      if (!teamMap.has(team.projectKey)) {
-        teamMap.set(team.projectKey, { ...team, epics: [] });
-      }
-      const existing = teamMap.get(team.projectKey)!;
-      existing.epics.push(...team.epics);
-      // Keep latest completion date
-      if (team.completionDate) {
-        if (!existing.completionDate || team.completionDate > existing.completionDate) {
-          existing.completionDate = team.completionDate;
+    for (const phase of sortedPhases) {
+      const phaseEpics = byPhase.get(phase);
+      if (!phaseEpics || phaseEpics.length === 0) continue;
+
+      const phaseResult = scheduleEpics(
+        new Map([[team.projectKey, phaseEpics]]),
+        [team],
+        phaseStart,
+        colorMap,
+        schedulingMode
+      );
+
+      const teamResult = phaseResult.teams[0];
+      if (teamResult) {
+        scheduledEpics.push(...teamResult.epics);
+        // This team's next phase starts right after this one finishes
+        if (teamResult.completionDate) {
+          phaseStart = nextBusinessDay(teamResult.completionDate);
         }
       }
     }
 
-    // Next phase starts the day after this phase's overall completion
-    if (phaseResult.overallCompletionDate) {
-      phaseStart = nextBusinessDay(phaseResult.overallCompletionDate);
-    }
+    if (scheduledEpics.length === 0) continue;
+
+    const activeEpics = scheduledEpics.filter((e) => e.statusCategory !== 'done');
+    const completionDate = activeEpics.length > 0
+      ? activeEpics.reduce((max, e) => (e.endDate > max ? e.endDate : max), activeEpics[0].endDate)
+      : null;
+
+    teamSchedules.push({
+      projectKey: team.projectKey,
+      projectName: team.projectName,
+      color,
+      weeklyCapacityDays,
+      completionDate,
+      epics: scheduledEpics,
+    });
   }
 
-  const teams_result = Array.from(teamMap.values());
-  const completionDates = teams_result
-    .map((t) => t.completionDate)
-    .filter((d): d is Date => d !== null);
+  const completionDates = teamSchedules.map((t) => t.completionDate).filter((d): d is Date => d !== null);
   const overallCompletionDate = completionDates.length > 0
     ? completionDates.reduce((a, b) => (a > b ? a : b))
     : null;
 
   return {
-    teams: teams_result,
+    teams: teamSchedules,
     overallCompletionDate,
-    totalEpics: teams_result.reduce((s, t) => s + t.epics.length, 0),
-    totalRemainingDays: teams_result.reduce(
+    totalEpics: teamSchedules.reduce((s, t) => s + t.epics.length, 0),
+    totalRemainingDays: teamSchedules.reduce(
       (s, t) => s + t.epics.reduce((es: number, e: { remainingDays: number }) => es + e.remainingDays, 0),
       0
     ),

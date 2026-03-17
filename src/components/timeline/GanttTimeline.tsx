@@ -149,8 +149,9 @@ export function GanttTimeline() {
   const { result: liveResult, isLoading, error } = useSchedule();
   const {
     savedSchedule, savedAt, phases,
-    isScheduling, scheduleError,
-    scheduleAndSave, clearSchedule, canSchedule,
+    isScheduling, isSyncing, scheduleError,
+    scheduleAndSave, syncFromJira, clearSchedule,
+    canSchedule, hasCredentials,
   } = usePhaseSchedule();
   const { snapshot: serverSnapshot, savedAt: serverSavedAt } = useServerSnapshot();
   const { settings, updateSettings } = useSettings();
@@ -360,11 +361,20 @@ export function GanttTimeline() {
       <div className="flex flex-wrap items-center gap-3">
         <button
           onClick={scheduleAndSave}
-          disabled={isScheduling || !canSchedule}
+          disabled={isScheduling || isSyncing || !canSchedule}
           className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
         >
-          {isScheduling ? '⏳ Scheduling…' : '🗓 Schedule All Phases & Save'}
+          {isScheduling ? '⏳ Scheduling…' : '🗓 Schedule & Save'}
         </button>
+        {hasCredentials && (
+          <button
+            onClick={syncFromJira}
+            disabled={isSyncing || isScheduling}
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+          >
+            {isSyncing ? '⏳ Syncing…' : '🔄 Sync from Jira'}
+          </button>
+        )}
         {(serverSnapshot || savedSchedule) && (
           <>
             <span className="text-xs text-gray-400">
@@ -421,14 +431,8 @@ export function GanttTimeline() {
             type="date"
             value={settings.scheduleStartDate}
             onChange={(e) => updateSettings({ scheduleStartDate: e.target.value })}
-            className="px-2 py-2 border-r focus:outline-none"
+            className="px-2 py-2 focus:outline-none"
           />
-          <button
-            onClick={() => updateSettings({ scheduleStartDate: new Date().toISOString().split('T')[0] })}
-            className="flex items-center gap-1.5 px-3 py-2 font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors whitespace-nowrap"
-          >
-            ⚡ Schedule from today
-          </button>
         </div>
 
         <div className="flex items-center gap-0 border rounded-lg overflow-hidden text-sm">
