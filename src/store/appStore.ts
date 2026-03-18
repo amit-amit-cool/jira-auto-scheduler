@@ -29,6 +29,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     teams: [],
     scheduleStartDate: new Date().toISOString().split('T')[0],
     schedulingMode: 'collaborate' as const,
+    estimationBuffer: 0,
     fieldOverrides: {},
   },
   isLoaded: false,

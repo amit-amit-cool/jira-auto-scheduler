@@ -90,6 +90,15 @@ function teamsFromSnapshot(result: ScheduleResult): TeamConfig[] {
   }));
 }
 
+function applyBuffer(estimates: EpicWithEstimate[], bufferPct: number): EpicWithEstimate[] {
+  if (!bufferPct) return estimates;
+  const mult = 1 + bufferPct / 100;
+  return estimates.map((e) => ({
+    ...e,
+    remainingDays: e.statusCategory === 'done' ? 0 : e.remainingDays * mult,
+  }));
+}
+
 function runSchedule(
   epicEstimates: EpicWithEstimate[],
   teams: TeamConfig[],
@@ -104,7 +113,10 @@ function runSchedule(
     ? parseISO(settings.scheduleStartDate)
     : new Date();
 
-  const phasedEpics = epicEstimates.filter(e => e.nwld && /^v[1-4]/i.test(e.nwld));
+  const phasedEpics = applyBuffer(
+    epicEstimates.filter(e => e.nwld && /^v[1-4]/i.test(e.nwld)),
+    settings.estimationBuffer ?? 0
+  );
 
   return scheduleAllPhases(
     phasedEpics,

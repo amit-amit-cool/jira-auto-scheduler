@@ -10,6 +10,7 @@ export const defaultSettings: AppSettingsOutput = {
   teams: [],
   scheduleStartDate: new Date().toISOString().split('T')[0],
   schedulingMode: 'collaborate',
+  estimationBuffer: 0,
   fieldOverrides: {},
 };
 

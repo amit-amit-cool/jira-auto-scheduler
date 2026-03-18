@@ -22,6 +22,7 @@ export const AppSettingsSchema = z.object({
   teams: z.array(TeamConfigSchema).default([]),
   scheduleStartDate: z.string().default(new Date().toISOString().split('T')[0]),
   schedulingMode: z.enum(['one-per-epic', 'collaborate']).default('collaborate'),
+  estimationBuffer: z.number().min(0).max(100).default(0),
   fieldOverrides: z.object({
     storyPointsFieldId: z.string().optional(),
     timeSpentFieldId: z.string().optional(),

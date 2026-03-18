@@ -4,6 +4,7 @@ import { ProjectSelector } from '@/components/settings/ProjectSelector';
 import { TeamMemberTable } from '@/components/settings/TeamMemberTable';
 import { ScheduleStartDate } from '@/components/settings/ScheduleStartDate';
 import { SchedulingMode } from '@/components/settings/SchedulingMode';
+import { EstimationBuffer } from '@/components/settings/EstimationBuffer';
 import { AdvancedFields } from '@/components/settings/AdvancedFields';
 import { useSettings } from '@/hooks/useSettings';
 
@@ -43,6 +44,12 @@ export default function SettingsPage() {
 
       <section>
         <SchedulingMode />
+      </section>
+
+      <hr />
+
+      <section>
+        <EstimationBuffer />
       </section>
 
       <hr />
