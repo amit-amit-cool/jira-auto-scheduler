@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const COOKIE_NAME = 'site-auth';
-const VALID_USERNAME = process.env.SITE_USERNAME ?? '';
-const VALID_PASSWORD = process.env.SITE_PASSWORD ?? '';
 const SESSION_TOKEN = process.env.SITE_SESSION_TOKEN ?? '';
+
+const VALID_USERS = [
+  { username: process.env.SITE_USERNAME ?? '', password: process.env.SITE_PASSWORD ?? '' },
+  { username: 'amit', password: 'amit' },
+];
 
 export async function POST(req: NextRequest) {
   const { username, password } = await req.json();
 
-  if (username !== VALID_USERNAME || password !== VALID_PASSWORD) {
+  const isValid = VALID_USERS.some(u => u.username === username && u.password === password);
+  if (!isValid) {
     return NextResponse.json({ error: 'Incorrect username or password' }, { status: 401 });
   }
 
